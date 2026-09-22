@@ -1,0 +1,6 @@
+node_modules/
+*.bak
+*.tmp
+cordis.patch.yml.bak
+cordis.patch.yml.tmp
+.DS_Store

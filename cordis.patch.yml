@@ -1,0 +1,59 @@
+# dsh-plugin-integration — bundle patch layer.
+#
+# This file is the `dsh.bundle.patch` layer of the package. Installing through
+# the official CLI:
+#
+#   dsh plugin --profile <name> add dsh-plugin-integration
+#
+# makes `dsh` reconcile `dsh.profile.bundles` against the installed packages
+# and, seeing this declaration, append `dsh-plugin-integration` to the bundle
+# stack. Profile boot then merges THIS patch exactly like any other bundle
+# layer, so no profile file has to be edited by hand. Restart `dsh web`
+# afterwards: a bundle layer joins the tree at startup.
+#
+# ---------------------------------------------------------------------------
+# Migrating from a hand-written `file:` mount line
+# ---------------------------------------------------------------------------
+# If the profile's own cordis.patch.yml still mounts this plugin by path, e.g.
+#
+#   - insert:
+#       - id: plugin-integration
+#         name: 'file:///home/you/.dsh/profiles/web/plugins/dsh-plugin-integration/lib/index.js?v=3'
+#
+# DELETE that row before installing the bundle. Two enabled rows would both
+# register the exact route /plugin-integration/api, and the webserver rejects a
+# duplicate exact route — which fails the whole plugin tree at boot. As a safety
+# net the plugin itself now degrades instead of throwing (the second row skips
+# its registration and logs a warning), but the duplicate row is still dead
+# weight: remove it.
+#
+# ---------------------------------------------------------------------------
+# Options
+# ---------------------------------------------------------------------------
+# The row below carries no config. To change behaviour, add a row with the SAME
+# id `plugin-integration` to the PROFILE's own cordis.patch.yml — it is applied
+# after every bundle layer and overrides this one:
+#
+#   - id: plugin-integration
+#     config:
+#       profileDir: /abs/path/to/$DSH_HOME/profiles/web
+#       dshCommand: /abs/path/to/dsh
+#       allowRemote: false
+#
+#   profileDir   Profile whose patch layer this page may write.
+#                Default: auto-detected (see README), and validated — a
+#                directory that is not a DSH profile is never written to.
+#   dshCommand   Executable used for `dsh plugin --profile <name> …`.
+#                Default: `dsh` resolved from PATH.
+#   allowRemote  true lifts the loopback-only admission rule. The browser
+#                carrier has no authentication of its own and this page returns
+#                secret values and rewrites configuration — only set this if the
+#                port is already protected some other way.
+- insert:
+    - id: plugin-integration
+      name: 'dsh-plugin-integration'
+      # Back off when another enabled row already mounts this package — an
+      # aggregate bundle (which precedes this one in the bundle stack) or a
+      # leftover manual `file:` mount. The substring match is deliberate: a
+      # hand-written mount is a path/URL, not the bare package name.
+      disabled: !!js "[...ctx.loader.entries()].some((e) => String(e.options.name).includes('dsh-plugin-integration') && e.options.id !== 'plugin-integration' && !e.disabled)"

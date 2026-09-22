@@ -1,0 +1,27 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  contract:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        node: ['20', '22']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+      # No build step: both halves ship as plain ESM, which is what keeps
+      # `dsh plugin add github:<owner>/<repo>` working without a pnpm
+      # `allowBuilds` approval. Keep it that way.
+      - run: npm install --no-audit --no-fund
+      - run: node --check lib/index.js
+      - run: node --check lib/client.js
+      - run: node --test test/

@@ -1,0 +1,55 @@
+{
+  "name": "dsh-plugin-integration",
+  "version": "1.0.0",
+  "description": "DSH web plugin: manage a profile's plugins, MCP servers and skills from Settings (live read-only inventory plus a validated profile patch-layer writer).",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./client": "./lib/client.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib/index.js",
+    "lib/client.js",
+    "cordis.patch.yml",
+    "README.md",
+    "README.zh.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web"
+    }
+  },
+  "dependencies": {
+    "js-yaml": "^4.2.0"
+  },
+  "scripts": {
+    "test": "node --test test/",
+    "check": "node --check lib/index.js && node --check lib/client.js"
+  },
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "cordis",
+    "mcp",
+    "plugin-manager"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/quietseek/dsh-plugin-integration.git"
+  },
+  "bugs": {
+    "url": "https://github.com/quietseek/dsh-plugin-integration/issues"
+  },
+  "homepage": "https://github.com/quietseek/dsh-plugin-integration#readme"
+}
