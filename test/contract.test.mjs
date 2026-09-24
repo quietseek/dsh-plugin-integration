@@ -100,7 +100,7 @@ test('the host half exports a Cordis plugin', async () => {
 })
 
 test('every screenshot a README embeds actually exists', () => {
-  for (const readme of ['README.md', 'README.zh.md']) {
+  for (const readme of ['README.md', 'README.en.md']) {
     const source = readFileSync(at(readme), 'utf8')
     const links = [...source.matchAll(/!\[[^\]]*\]\(([^)]+)\)/g)].map((match) => match[1])
     assert.ok(links.length > 0, `${readme} should show the UI`)

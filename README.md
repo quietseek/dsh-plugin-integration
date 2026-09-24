@@ -1,196 +1,171 @@
-# dsh-plugin-integration
+# dsh-plugin-integration（插件集成）
 
-**English** · [简体中文](README.zh.md)
+**简体中文** · [English](README.en.md)
 
-A [DSH](https://github.com/deepseek-ai/deepseek-harness) web plugin that puts one page in
-**Settings → Plugins → Integration** for the three things a profile is actually made of:
-its **plugins**, its **MCP servers**, and its **skills**.
+在 DSH Web 的 **设置 → 插件 → 插件集成** 里管理一个 profile 的三件事：**插件**、**MCP 服务器**、**技能**。
 
-It is a *persistent* plugin (a normal package loaded by `dsh web`), not an in-memory Cordis
-experiment: it comes back after a restart.
+这是一个**常驻**插件（随 `dsh web` 启动加载的普通包），不是内存态的 Cordis 实验包：重启之后它还在。
 
-> The Web UI of this plugin is currently Chinese-only. The host API, configuration and all
-> messages on this page are stable; see [Translating the UI](#translating-the-ui).
+## 截图
 
-## Screenshots
+**插件** —— profile 已安装的全部依赖，含版本、`dsh` 声明与各行相位；卸载走官方 CLI。
 
-**Plugins** — every dependency installed in the profile, with its version, its `dsh`
-declarations and each matched Loader row's phase. Uninstall runs the official CLI.
+![插件标签页](docs/screenshots/01-plugins.png)
 
-![The Plugins tab](docs/screenshots/01-plugins.png)
+**MCP** —— 上方是已挂载的服务器，下方是增改表单；条目会先校验，再把即将写入的 `cordis.patch.yml` 原文预览出来。
 
-**MCP** — mounted servers on top; below, the add/edit form. An entry is validated and
-previewed as the exact `cordis.patch.yml` text before anything is written.
+![MCP 标签页](docs/screenshots/02-mcp.png)
 
-![The MCP tab](docs/screenshots/02-mcp.png)
+**技能** —— 某个 Agent 预设视角看到的技能目录，含来源、是否可手动调用与正文。
 
-**Skills** — the catalog one agent preset's standing composition sees, with each skill's
-source, model/user invocability and body.
+![技能标签页](docs/screenshots/03-skills.png)
 
-![The Skills tab](docs/screenshots/03-skills.png)
+## 能做什么
 
-## What it does
-
-| Tab | Read | Write |
+| 标签页 | 读 | 写 |
 |---|---|---|
-| **Plugins** | Every dependency installed in the profile — the same list `dsh plugin --profile <name> list` prints — with its version, whether it declares `dsh.bundle` / a client half, its matched Loader rows and each row's phase (`pending` / `loading` / `active` / `failed` / `unloading`) | **Uninstall** one, through the official CLI (`dsh plugin --profile <name> remove <pkg>`) so the dependency, the lockfile and `dsh.profile.bundles` all move together |
-| **MCP** | Every mounted `mcp-client` row, host plane and preset plane, with transport and target | **Add / edit / remove** an MCP server: the entry is validated, previewed as the exact `cordis.patch.yml` text, then written |
-| **Skills** | The skill catalog a given agent preset's standing composition sees, with per-skill source and full body | read-only by design |
+| **插件** | profile 已安装的全部依赖 —— 与 `dsh plugin --profile <name> list` 同一口径 —— 含版本、是否声明 `dsh.bundle` / 客户端半包、匹配到的 Loader 行及各行相位（`pending` / `loading` / `active` / `failed` / `unloading`） | **卸载**：走官方通道 `dsh plugin --profile <name> remove <pkg>`，依赖、锁文件、`dsh.profile.bundles` 三处一起变 |
+| **MCP** | 已挂载的每一条 `mcp-client` 行（宿主平面与预设平面），含传输方式与目标 | **增 / 改 / 删**：先校验，再把即将写入的 `cordis.patch.yml` 文本原样预览，最后写入 |
+| **技能** | 指定 Agent 预设视角看到的技能目录，含来源与技能正文 | 设计上只读 |
 
-Plus one model-visible tool, `plugin_integration_status`, which answers "what's installed /
-why isn't this plugin mounted" without opening the UI.
+另有一个模型可见的工具 `plugin_integration_status`，不打开页面也能回答"装了什么 / 某个插件为什么没挂上"。
 
-## Requirements
+## 环境要求
 
-- DSH with a `web` profile (`dsh web`).
-- Node.js ≥ 20.
-- `dsh` on `PATH` **only** for the uninstall button; everything else works without it
-  (see [`dshCommand`](#configuration)).
+- 带 `web` profile 的 DSH（`dsh web`）。
+- Node.js ≥ 20。
+- 仅"卸载"按钮需要 `dsh` 在 `PATH` 上；其余功能不需要（见 [`dshCommand`](#配置)）。
 
-## Install
+## 安装
 
 ```bash
-# straight from GitHub
+# 直接从 GitHub 安装
 dsh plugin --profile web add github:quietseek/dsh-plugin-integration
 ```
 
-Then **restart `dsh web`**. A bundle layer joins the plugin tree at startup, so a reload of
-the page is not enough for the first install. Open **Settings → Plugins → Integration**.
+然后**重启 `dsh web`**。bundle 层是启动时组合的，首次安装只刷新页面不够。之后打开
+**设置 → 插件 → 插件集成**。
 
-That is the whole installation: the package declares `dsh.bundle.patch`, so the CLI appends
-it to `dsh.profile.bundles` and profile boot merges its own patch layer. No profile file is
-edited by hand.
+安装就是这一条命令：包里声明了 `dsh.bundle.patch`，CLI 会把它追加进 `dsh.profile.bundles`，
+profile 启动时合并它自带的补丁层，**不需要手改任何 profile 文件**。
 
-### Already mounting it manually?
+### 之前是手动挂载的？
 
-Delete the `file:///…/dsh-plugin-integration/lib/index.js?v=N` row from your profile's own
-`cordis.patch.yml` **before** installing the bundle. Two enabled rows would both register
-the route `/plugin-integration/api`, and a duplicate exact route makes the webserver reject
-the entry — which fails the whole plugin tree at boot. The bundled patch carries a guard for
-the case where the duplicate exists anyway, and the plugin now skips its own registration
-with a warning instead of throwing, but the leftover row is still dead weight.
+先删掉 profile 自己 `cordis.patch.yml` 里那条
+`file:///…/dsh-plugin-integration/lib/index.js?v=N`，**再**安装 bundle。两条同时启用会各自注册
+`/plugin-integration/api`，而 webserver 对重复 exact 路由是直接拒绝的 —— 会导致**整棵插件树启动失败**。
+bundle 补丁里带了兜底守卫，插件本身现在也会跳过自己的注册并打一条 warning 而不是抛错，
+但那条多余的挂载行仍然应该删掉。
 
-### Without the CLI (offline / development)
+### 不用 CLI（离线 / 开发）
 
 ```bash
 git clone https://github.com/quietseek/dsh-plugin-integration ~/dsh-plugin-integration
 dsh plugin --profile web add file:$HOME/dsh-plugin-integration
 ```
 
-`file:` / `link:` specs work the same way: the bundle declaration is what puts the package
-into `dsh.profile.bundles`.
+`file:` / `link:` 规格同样有效：真正决定它进 `dsh.profile.bundles` 的是 bundle 声明。
 
-## Configuration
+## 配置
 
-Add a row with the **same id** to the profile's own `cordis.patch.yml` (it is applied after
-every bundle layer, so it overrides the bundled row):
+在 profile 自己的 `cordis.patch.yml` 里加一条**同 id** 的行（它在所有 bundle 层之后应用，因此覆盖内置行）：
 
 ```yaml
 - id: plugin-integration
   config:
-    profileDir: /home/you/.dsh/profiles/web   # default: auto-detected
-    dshCommand: /usr/local/bin/dsh            # default: `dsh` from PATH
-    allowRemote: false                        # default: loopback only
+    profileDir: /home/you/.dsh/profiles/web   # 默认：自动探测
+    dshCommand: /usr/local/bin/dsh            # 默认：PATH 上的 dsh
+    allowRemote: false                        # 默认：仅回环
 ```
 
-| Key | Default | Meaning |
+| 键 | 默认 | 含义 |
 |---|---|---|
-| `profileDir` | auto-detected | Profile whose patch layer the page may write. Auto-detection tries `ctx.baseUrl`, then the package's own location, and **validates** each candidate against the profile manifest before trusting it. Set this explicitly if the log says the profile could not be located. |
-| `dshCommand` | `dsh` | Executable used for `dsh plugin --profile <name> …`. Set it when `dsh` is not on `PATH` (a wheel runtime, a local install, an absolute path). |
-| `allowRemote` | `false` | Lifts the loopback-only admission rule. Read the warning below before using it. |
+| `profileDir` | 自动探测 | 本页可写的 profile。探测顺序是 `ctx.baseUrl` → 包自身位置，且**每个候选都会做 profile 校验**后才采信。日志里出现"未能定位 profile 目录"时就显式设置它。 |
+| `dshCommand` | `dsh` | `dsh plugin --profile <name> …` 使用的可执行文件。`dsh` 不在 `PATH` 上时（wheel 运行时、本地安装、绝对路径）设置它。 |
+| `allowRemote` | `false` | 解除"仅回环"限制。用之前先读下面的警告。 |
 
-## Security
+## 安全设计
 
-The page reads and writes the configuration of your Harness, so it is deliberately narrow:
+这个页面会读写你的 Harness 配置，所以边界收得很紧：
 
-- **Loopback only.** Every request must come from a loopback peer *and* the carrier must not
-  be bound to `0.0.0.0`, unless `allowRemote: true`. This matters because the DSH browser
-  carrier has **no authentication of its own** (`webServer.host` may be `0.0.0.0`), and a
-  non-browser client sends no `Sec-Fetch-Site` header — so a same-origin check alone admits
-  `curl`. `GET /plugin-integration/api?action=mcp-detail` returns environment and header
-  **values** in clear text (that is the point of the edit form), and `POST …plugin-uninstall`
-  runs the package manager.
-- **Same-origin only**, in addition (browsers on the same machine are still loopback).
-- **Writes are surgical.** The patch layer keeps its comments and existing content; the
-  exact text about to be published is re-parsed and the entry count must change by exactly
-  one before anything is written; a `.bak` copy precedes an atomic
-  temp-file-plus-rename.
-- **Only entries this plugin wrote are editable.** Each managed entry carries a
-  `# 插件集成 managed mcp server: <name>` marker; hand-written rows are read-only from the
-  page and are never touched.
-- **Secrets are not rendered** in the list view (`headers` / `env` show key names only).
-- **The plugin refuses to uninstall itself**, and refuses any name that is not a dependency
-  of the profile.
+- **仅回环**：除非设了 `allowRemote: true`，请求必须来自回环对端，**且**载体不能绑定在 `0.0.0.0`。
+  这一点是必要的：DSH 的浏览器载体**自身没有鉴权**（`webServer.host` 可以配成 `0.0.0.0`），
+  而 `Sec-Fetch-Site` 头在非浏览器客户端上根本不存在 —— 只检查同源等于放行 `curl`。
+  另外 `GET …?action=mcp-detail` 会明文返回环境变量与请求头的**值**（编辑表单需要），
+  `POST …plugin-uninstall` 会调用包管理器。
+- **同源**：在此之上再加同源校验（同机浏览器对回环地址同样成立，所以两者都需要）。
+- **写入是外科手术式的**：补丁层保留注释与既有内容；即将发布的文本会被**再解析一次**，
+  条目数必须正好 +1 才落盘；落盘前留一份 `.bak`，并用临时文件 + rename 原子替换。
+- **只认本插件写过的条目**：每条托管条目带 `# 插件集成 managed mcp server: <name>` 标记，
+  手写的行在页面上永远是只读的，绝不改动。
+- **不渲染密钥**：列表视图里 `headers` / `env` 只显示键名。
+- **拒绝卸载自己**，也拒绝任何不是本 profile 依赖的名字。
 
-If you expose the Harness port beyond loopback, put authentication in front of it and treat
-this page as a privileged admin surface.
+如果你把 Harness 端口暴露到回环之外，请自行在前面加鉴权，并把本页当作特权管理界面。
 
-## HTTP contract
+## HTTP 契约
 
-Single route, JSON, loopback-only. Generated rows use the `serverName` as their Loader `id`.
+单一路由，JSON，仅回环。生成的条目用 `serverName` 作为 Loader `id`。
 
-| Method | `action` | Purpose |
+| 方法 | `action` | 说明 |
 |---|---|---|
-| GET | `snapshot` | Whole page state: plugin rows + counts, preset compositions, MCP list, skill catalog for `preset`, the patch-layer text, client-bundle self-check |
-| GET | `skills` | Skill catalog for one preset (`preset=<id>`) |
-| GET | `skill` | One skill's body (`preset`, `name`) |
-| GET | `mcp-snippet` | Render a `cordis.patch.yml` fragment (repeatable `arg`, `envName`/`envValue`, `headerName`/`headerValue`) |
-| GET | `mcp-detail` | One mounted server's full config, **values included**, to prefill the edit form |
-| POST | `mcp-apply` | Validate and append a fragment to the patch layer |
-| POST | `mcp-replace` | Edit an entry this page wrote (`original` names it; renaming is allowed) |
-| POST | `mcp-remove` | Remove an entry this page wrote |
-| POST | `plugin-uninstall` | `{"name": "..."}`; `{"name": "...", "dryRun": true}` only checks the CLI channel |
+| GET | `snapshot` | 页面全量状态：插件行 + 计数、各预设组成、MCP 列表、指定预设视角的技能目录、补丁层文本、客户端包注册自检 |
+| GET | `skills` | 某个预设视角的技能目录（`preset=<id>`） |
+| GET | `skill` | 单个技能正文（`preset`、`name`） |
+| GET | `mcp-snippet` | 生成 `cordis.patch.yml` 片段（`arg`、`envName`/`envValue`、`headerName`/`headerValue` 可重复） |
+| GET | `mcp-detail` | 一台已挂载 MCP 服务器的完整配置（含**值**），用于回填编辑表单 |
+| POST | `mcp-apply` | 校验后把片段写入补丁层 |
+| POST | `mcp-replace` | 编辑本页写入过的条目（`original` 指明原名，允许改名） |
+| POST | `mcp-remove` | 移除本页写入的条目 |
+| POST | `plugin-uninstall` | `{"name": "..."}`；带 `"dryRun": true` 时只自检 CLI 通道 |
 
-## Local development
+## 本地开发
 
 ```yaml
-# the profile's own cordis.patch.yml — hand-written mount, dev only
+# profile 自己的 cordis.patch.yml —— 手写挂载，仅开发用
 - insert:
     - id: plugin-integration
       name: 'file:///abs/path/to/dsh-plugin-integration/lib/index.js?v=1'
 ```
 
-- **`lib/client.js` only** → refresh the browser page (the client scan re-hashes the file).
-- **`lib/index.js`** → bump `?v=N` (the Node ESM cache keys on the full URL, so a changed
-  query string is a new module) or restart `dsh web`.
+- **只改 `lib/client.js`**：刷新浏览器页面即可（客户端扫描会按文件内容重算 rev）。
+- **改了 `lib/index.js`**：把 `?v=N` 数字 +1（Node ESM 按完整 URL 缓存，查询串变化 = 新模块），
+  或者重启 `dsh web`。
 
-`npm test` runs the packaging contract (module id vs package name, bundle declaration,
-exports, declared dependencies, "no build step"). `npm run check` syntax-checks both halves.
+`npm test` 跑的是打包契约（客户端模块 id 与包名一致、bundle 声明、exports、依赖声明齐全、
+无构建步骤）；`npm run check` 对两个半包做语法检查。
 
-## Troubleshooting
+## 常见问题
 
-**The tab doesn't appear.** The client bundle is registered under the *package name*. Check
-the page diagnostics (`客户端包 … 未注册到页面图`) and that `package.json` has not been renamed
-without editing the `id` in `lib/client.js` — `npm test` asserts they agree.
+**标签页不出现。** 客户端包是按**包名**注册的。看页面诊断里的
+`客户端包 … 未注册到页面图`，并确认没有"改了包名却没改 `lib/client.js` 里的 `id`" ——
+`npm test` 会断言两者一致。
 
-**"未能定位 profile 目录" / writes are refused.** Auto-detection did not find a directory that
-looks like a profile. Set `config.profileDir` explicitly. This guard exists because the old
-package-relative guess silently wrote a `cordis.patch.yml` into `node_modules/` (scoped
-installs) or `$DSH_HOME/profiles/` (the shared fallback) instead of failing.
+**提示"未能定位 profile 目录" / 拒绝写入。** 自动探测没找到像 profile 的目录，显式设置
+`config.profileDir`。这个闸门存在的原因是：早期的"从包位置往上一级"猜测在 scoped 安装下会往
+`node_modules/`、在共享回退目录下会往 `$DSH_HOME/profiles/` 静默写入一个 `cordis.patch.yml`，
+而不是报错。
 
-**Boot fails with "duplicate exact route".** Two rows mount this plugin; remove the manual
-one (see [Already mounting it manually?](#already-mounting-it-manually)).
+**启动失败并报 "duplicate exact route"。** 有两条行挂载了本插件，删掉手写的那条
+（见[之前是手动挂载的？](#之前是手动挂载的)）。
 
-**Uninstall button reports a spawn failure.** `dsh` is not on `PATH`; set `config.dshCommand`.
+**卸载按钮报 spawn 失败。** `dsh` 不在 `PATH` 上，设置 `config.dshCommand`。
 
-**A `dsh.bundle` plugin stays unloaded after uninstalling it.** Bundle layers are composed at
-startup — restart `dsh web`. The page tells you this and echoes the CLI output.
+**卸载了 bundle 型插件但好像还在。** bundle 层是启动时组合的，重启 `dsh web`；页面会提示这一点并回显 CLI 输出。
 
-## Known limits
+## 已知边界
 
-- Web profile only (`dsh.client.platform: "web"`, and the host half needs `webServer`).
-- Only the patch layer is managed. `dsh.profile.bundles` is not rewritten from the page —
-  that changes at startup and belongs to the CLI.
-- Skills are a read-only view (catalog and bodies, no add/remove).
-- The UI is Chinese-only for now.
+- 仅支持 web profile（`dsh.client.platform: "web"`，且宿主半包需要 `webServer`）。
+- 只管理补丁层；不从页面改写 `dsh.profile.bundles`（那是启动期的事，归 CLI 管）。
+- 技能是只读视图（目录 + 正文，不提供增删）。
+- 界面目前只有中文。
 
-### Translating the UI
+### 做多语言
 
-`lib/client.js` holds every user-facing string in a handful of literals (`PHASE_TEXT`, the
-tab labels, the buttons and section titles). DSH ships `@deepseek-ai/dsh-client-locale` for
-this; adopting it means adding the package to `dsh.client.inject` and wrapping the literals.
-Contributions welcome.
+`lib/client.js` 里所有面向用户的字符串都集中在少数几个字面量（`PHASE_TEXT`、标签页名、按钮与分区标题）。
+DSH 自带的 `@deepseek-ai/dsh-client-locale` 就是为此准备的：把它加进 `dsh.client.inject`
+再把这些字面量换成 `t(...)` 即可。欢迎 PR。
 
-## License
+## 许可证
 
-MIT — see [LICENSE](LICENSE).
+MIT，见 [LICENSE](LICENSE)。
