@@ -1,6 +1,6 @@
 {
   "name": "dsh-plugin-integration",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "DSH web plugin: manage a profile's plugins, MCP servers and skills from Settings (live read-only inventory plus a validated profile patch-layer writer).",
   "type": "module",
   "main": "lib/index.js",
